@@ -183,112 +183,94 @@ imagePullSecrets:
 
 This tells the deployment to pull from the Pi registry and use the `regcred` secret.
 
-## Nx workspace
+## Continuous integration
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+One workflow, [.github/workflows/ci.yml](.github/workflows/ci.yml), with a single job
+`main` on `ubuntu-latest`. It runs on every push to `main` and on every pull request.
 
-This repo is an [Nx workspace](https://nx.dev).
+| Step | Why |
+| --- | --- |
+| `actions/checkout@v5` with `fetch-depth: 0` | full history, so Nx can diff against `origin/main` |
+| `npx nx start-ci-run --distribute-on="3 linux-medium-js"` | hands task execution to Nx Cloud agents |
+| `actions/setup-node@v5`, Node 24, `cache: npm` | toolchain plus a warm npm cache |
+| `npm ci` | install from the lockfile |
+| `npx nx record -- npx nx format:check --base="remotes/origin/main"` | formatting, logged to Nx Cloud |
+| `npx nx run-many -t lint test build typecheck e2e` | the actual checks |
+| `npx nx fix-ci` (`if: always()`) | Nx Cloud suggests fixes for failures |
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/docs/technologies/typescript/introduction?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+Two things it does **not** do yet, worth knowing before you rely on it:
 
-🚀 If you haven't connected to Nx Cloud yet, [complete your setup here](https://cloud.nx.app/get-started). Get faster builds with remote caching, distributed task execution, and self-healing CI. [See how your workspace can benefit](#nx-cloud).
+- **The Go app isn't covered.** `apps/healthcheck` has no `project.json` and there's no Nx
+  Go plugin installed, so `nx run-many` finds no targets for it — `go build`, `go vet` and
+  `go test` never run in CI.
+- **No image build or push.** Nothing builds the Dockerfile or pushes to the registry, so
+  deploys stay manual via `./k3pi push`.
 
-## Generate a library
+The Nx Cloud steps need an `NX_CLOUD_ACCESS_TOKEN`. Without it they fail or degrade to
+running everything on the one runner.
 
-```sh
-npx nx g @nx/js:lib packages/pkg1 --publishable --importPath=@my-org/pkg1
-```
+## Running CI locally with act
 
-## Run tasks
-
-To build the library use:
-
-```sh
-npx nx run pkg1:build
-```
-
-To run any task with Nx use:
-
-```sh
-npx nx run <project-name>:<target>
-```
-
-These targets are either [inferred automatically](https://nx.dev/docs/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
-
-[More about running tasks in the docs &raquo;](https://nx.dev/docs/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Versioning and releasing
-
-To version and release the library use
-
-```
-npx nx release
-```
-
-Pass `--dry-run` to see what would happen without actually releasing the library.
-
-[Learn more about Nx release &raquo;](https://nx.dev/docs/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Keep TypeScript project references up to date
-
-Nx automatically updates TypeScript [project references](https://www.typescriptlang.org/docs/handbook/project-references.html) in `tsconfig.json` files to ensure they remain accurate based on your project dependencies (`import` or `require` statements). This sync is automatically done when running tasks such as `build` or `typecheck`, which require updated references to function correctly.
-
-To manually trigger the process to sync the project graph dependencies information to the TypeScript project references, run the following command:
+[act](https://github.com/nektos/act) executes the workflow on your machine in Docker
+containers, so you can iterate on CI without pushing commits.
 
 ```sh
-npx nx sync
+brew install act
 ```
 
-You can enforce that the TypeScript project references are always in the correct state when running in CI by adding a step to your CI job configuration that runs the following command:
+Docker Desktop must be running, since act creates containers for each job.
 
 ```sh
-npx nx sync:check
+act -l                 # list jobs in the workflow
+act -n                 # dry run: validate the workflow, execute nothing
+act                    # run the push event
+act pull_request       # run the pull_request event instead
+act -j main            # run just the 'main' job
 ```
 
-[Learn more about nx sync](https://nx.dev/reference/nx-commands#sync)
+### On Apple Silicon
 
-## Nx Cloud
+Most action images are amd64 only, and act warns about this on M-series Macs:
 
-Nx Cloud ensures a [fast and scalable CI](https://nx.dev/nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
+```
+⚠ You are using Apple M-series chip and you have not specified container architecture,
+you might encounter issues while running act. If so, try running it with
+'--container-architecture linux/amd64' ⚠
+```
 
-- [Remote caching](https://nx.dev/docs/features/ci-features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/docs/features/ci-features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/docs/features/ci-features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/docs/features/ci-features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-### Set up CI (non-Github Actions CI)
-
-**Note:** This is only required if your CI provider is not GitHub Actions.
-
-Use the following command to configure a CI workflow for your workspace:
+So pass it:
 
 ```sh
-npx nx g ci-workflow
+act --container-architecture linux/amd64
 ```
 
-[Learn more about Nx on CI](https://nx.dev/docs/features/ci-features?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+That runs under emulation and is noticeably slower than native.
 
-## Install Nx Console
+### Secrets
 
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
+This workflow needs an Nx Cloud token. Either pass it inline:
 
-[Install Nx Console &raquo;](https://nx.dev/docs/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+```sh
+act -s NX_CLOUD_ACCESS_TOKEN=<token>
+```
 
-## 🔗 Learn More
+or put it in a `.secrets` file, which act reads by default:
 
-- [Nx Documentation](https://nx.dev/docs)
-- [Crafting Your Workspace Tutorial](https://nx.dev/docs/getting-started/tutorials/crafting-your-workspace)
-- [Module Boundaries](https://nx.dev/docs/features/enforce-module-boundaries)
-- [Releasing Packages](https://nx.dev/docs/features/manage-releases)
-- [Nx Plugins](https://nx.dev/docs/concepts/nx-plugins)
-- [Nx Cloud](https://nx.dev/nx-cloud)
+```
+NX_CLOUD_ACCESS_TOKEN=<token>
+```
 
-## 💬 Community
+**Add `.secrets` to `.gitignore` before you create it** — it holds a live credential.
 
-Join the Nx community:
+### Things that behave differently than on GitHub
 
-- [Discord](https://go.nx.dev/community)
-- [X (Twitter)](https://twitter.com/nxdevtools)
-- [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [YouTube](https://www.youtube.com/@nxdevtools)
-- [Blog](https://nx.dev/blog)
+- **Nx Cloud distribution doesn't distribute.** `--distribute-on="3 linux-medium-js"`
+  spins up remote agents on real CI; locally everything runs in the one container.
+- **`cache: npm` gives you nothing.** There's no GitHub cache backend, so `npm ci`
+  downloads afresh every run.
+- **Artifact upload needs a server.** Add
+  `--artifact-server-path /tmp/act-artifacts` if you add steps that upload artifacts.
+- **First run asks which image size to use.** Medium is the reasonable default; pin it
+  explicitly with `-P ubuntu-latest=catthehacker/ubuntu:act-latest`.
+- **Images are large** — several GB for the Ubuntu runner image on first pull.
+
