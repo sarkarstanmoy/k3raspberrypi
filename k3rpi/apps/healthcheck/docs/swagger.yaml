@@ -1,0 +1,22 @@
+basePath: /api/v1
+host: localhost:3000
+info:
+  contact: {}
+  description: Liveness endpoint for the k3rpi cluster.
+  title: Healthcheck API
+  version: "1.0"
+paths:
+  /healthcheck:
+    get:
+      description: Reports whether the service is up
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Healthy
+          schema:
+            type: string
+      summary: Health check
+      tags:
+      - health
+swagger: "2.0"

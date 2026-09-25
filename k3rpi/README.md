@@ -1,8 +1,166 @@
-# New Nx Repository
+# k3rpi
+
+Apps for a single-node [K3s](https://k3s.io) cluster running on a Raspberry Pi.
+
+Docker Compose runs everything **locally** for development; the Helm chart deploys
+it to the **Pi**. Cluster setup itself is in [K3S_INSTALL.md](K3S_INSTALL.md).
+
+## Running locally
+
+```sh
+./k3pi up      # build the images and start the containers
+./k3pi down    # stop and remove them
+```
+
+`up` passes `--build`, so it picks up Go changes with no separate build step.
+Requires Docker Desktop to be running.
+
+Once up, the healthcheck app is on port 3000:
+
+| URL | What it is |
+| --- | --- |
+| http://localhost:3000/api/v1/healthcheck | returns `Healthy` |
+| http://localhost:3000/swagger/index.html | Swagger UI |
+
+Plain `docker compose` commands work too, for anything `k3pi` doesn't cover:
+
+```sh
+docker compose logs -f     # follow logs
+docker compose ps          # what's running
+```
+
+### How k3pi is put together
+
+```
+k3pi                     entrypoint: dispatches to the scripts below
+scripts/k3pi/
+├── _shared.sh            settings and helper functions, sourced by the others
+├── cmd_up.sh             docker compose up -d --build
+└── cmd_down.sh           docker compose down
+docker-compose.yml       the services
+```
+
+To add a command, drop a `cmd_<name>.sh` in `scripts/k3pi/` that sources
+`_shared.sh`, then add a line to the `case` block in `k3pi`.
+
+## Deploying to the Pi
+
+The Helm chart lives in [apps/healthcheck/chart](apps/healthcheck/chart). It pulls from the Zot registry exposed on the Pi, and you can point the chart at any image repository you push there.
+
+### 1. Push an image from your Mac
+
+From your Mac, log in to the Pi's registry endpoint and push the image:
+
+```sh
+docker login 192.168.1.187:30050 -u admin -p CHANGE_ME
+
+docker build -t 192.168.1.187:30050/healthcheck:latest ./apps/healthcheck
+docker push 192.168.1.187:30050/healthcheck:latest
+```
+
+If the registry is private, use the same username/password you configured for Zot.
+
+### 2. Refer to the image in the chart
+
+The chart defaults to a registry-backed image name that matches the K3s node:
+
+```yaml
+image: 192.168.1.187:30050/healthcheck
+tag: latest
+pullPolicy: Always
+```
+
+This is the same image name used by the deployment template:
+
+```yaml
+image: "{{ .Values.image }}:{{ .Values.tag }}"
+```
+
+So when you install or upgrade the chart, you can override the repository or tag without changing the template:
+
+```sh
+helm install healthcheck apps/healthcheck/chart \
+  --set image=192.168.1.187:30050/healthcheck \
+  --set tag=latest \
+  --set pullPolicy=Always
+```
+
+If you need private registry auth for the cluster, add an image pull secret:
+
+```sh
+kubectl -n default create secret docker-registry regcred \
+  --docker-server=192.168.1.187:30050 \
+  --docker-username=admin \
+  --docker-password=CHANGE_ME
+```
+
+Then in the chart values:
+
+```yaml
+imagePullSecrets:
+  - name: regcred
+```
+
+### 3. Alternative: import a local image directly into K3s
+
+If you want to skip the remote registry for a quick test, you can still import a local image into the cluster:
+
+```sh
+docker save k3rpi-healthcheck | ssh admin@192.168.1.187 'sudo k3s ctr images import -'
+helm install healthcheck apps/healthcheck/chart \
+  --set image=k3rpi-healthcheck --set tag=latest --set pullPolicy=IfNotPresent
+```
+
+The app is then served at http://healthcheck.192.168.1.187.nip.io/api/v1/healthcheck
+
+## Quick start: push from your Mac and deploy via Helm
+
+Use this exact flow for a private Zot registry on the Pi.
+
+### 1) Log in and push the image from your Mac
+
+```sh
+docker login 192.168.1.187:30050 -u admin -p CHANGE_ME
+docker build -t 192.168.1.187:30050/healthcheck:latest ./apps/healthcheck
+docker push 192.168.1.187:30050/healthcheck:latest
+```
+
+### 2) Create the pull secret in K3s
+
+```sh
+kubectl -n default create secret docker-registry regcred \
+  --docker-server=192.168.1.187:30050 \
+  --docker-username=admin \
+  --docker-password=CHANGE_ME
+```
+
+### 3) Install or upgrade the app with the registry image
+
+```sh
+helm upgrade --install healthcheck apps/healthcheck/chart \
+  --set image=192.168.1.187:30050/healthcheck \
+  --set tag=latest \
+  --set pullPolicy=Always \
+  --set imagePullSecrets[0].name=regcred
+```
+
+You can also do the same through a values file:
+
+```yaml
+image: 192.168.1.187:30050/healthcheck
+tag: latest
+pullPolicy: Always
+imagePullSecrets:
+  - name: regcred
+```
+
+This tells the deployment to pull from the Pi registry and use the `regcred` secret.
+
+## Nx workspace
 
 <a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+This repo is an [Nx workspace](https://nx.dev).
 
 [Learn more about this workspace setup and its capabilities](https://nx.dev/docs/technologies/typescript/introduction?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
 

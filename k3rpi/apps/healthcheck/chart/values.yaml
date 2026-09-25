@@ -1,0 +1,29 @@
+# Settings you can change. Everything in templates/ reads from this file.
+
+# How many copies of the app to run.
+replicas: 1
+
+# The container image to run, and which version of it.
+# This points at the Zot registry exposed by the Pi on port 30050.
+image: 192.168.1.187:30050/healthcheck
+# Override per deploy with --set tag=$(git rev-parse --short HEAD). A unique tag
+# per build is what makes Helm notice the change and roll the pod.
+tag: latest
+
+# If your registry requires authentication, set a Kubernetes Docker secret and
+# add it here, for example:
+# imagePullSecrets:
+#   - name: regcred
+imagePullSecrets: []
+
+# Always = re-download the image on every start, so a rebuilt "latest" is
+# picked up. Switch to IfNotPresent when you load an image onto the Pi by
+# hand, since Always would go looking for it in the registry and fail.
+pullPolicy: Always
+
+# The port the Go app listens on (see main.go: ListenAndServe(":3000")).
+port: 3000
+
+# The web address for the app. nip.io points any *.192.168.1.187.nip.io
+# name at your Pi, so you don't have to edit /etc/hosts.
+host: healthcheck.192.168.1.187.nip.io

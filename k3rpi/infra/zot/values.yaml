@@ -1,0 +1,53 @@
+# Zot - the image registry for the cluster.
+# Installed with:
+#   helm upgrade --install zot zot/zot -n registry --create-namespace -f infra/zot/values.yaml
+
+image:
+  repository: ghcr.io/project-zot/zot
+  tag: v2.1.21
+
+service:
+  type: ClusterIP
+  port: 5000
+
+ingress:
+  enabled: true
+  className: traefik
+  # Note the lowercase 't' - that's the chart's spelling, not a typo.
+  pathtype: Prefix
+  hosts:
+    - host: zot.192.168.1.187.nip.io
+      paths:
+        - path: /
+
+# With persistence on, the chart renders a StatefulSet with a volumeClaimTemplate
+# instead of a Deployment.
+persistence: true
+pvc:
+  create: true
+  storage: 10Gi
+  storageClassName: local-path
+  accessModes: ["ReadWriteOnce"]
+
+mountConfig: true
+configFiles:
+  # dedupe hardlinks shared layers between images; gc reclaims orphaned blobs.
+  # Both matter on a 10Gi volume sitting on an SD card.
+  config.json: |-
+    {
+      "storage": {
+        "rootDirectory": "/var/lib/registry",
+        "dedupe": true,
+        "gc": true,
+        "gcDelay": "2h"
+      },
+      "http": { "address": "0.0.0.0", "port": "5000" },
+      "log": { "level": "info" }
+    }
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi

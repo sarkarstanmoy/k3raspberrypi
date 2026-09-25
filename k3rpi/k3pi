@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# k3pi up    start the containers
+# k3pi down  stop them
+set -euo pipefail
+cd "$(dirname "$0")"
+
+case "${1:-}" in
+  up)   exec scripts/k3pi/cmd_up.sh   ;;
+  down) exec scripts/k3pi/cmd_down.sh ;;
+  *)    echo "usage: ./k3pi [up|down]" >&2; exit 1 ;;
+esac

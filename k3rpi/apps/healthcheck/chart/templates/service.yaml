@@ -1,0 +1,11 @@
+# Gives the app a stable internal name: http://healthcheck
+apiVersion: v1
+kind: Service
+metadata:
+  name: healthcheck
+spec:
+  selector:
+    app: healthcheck   # sends traffic to the pods labelled app: healthcheck
+  ports:
+    - port: 80                      # the port the Service answers on
+      targetPort: {{ .Values.port }} # the port inside the container

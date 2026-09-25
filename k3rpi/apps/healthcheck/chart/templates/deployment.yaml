@@ -1,0 +1,42 @@
+# Runs the app. The doubled curly braces pull settings out of values.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: healthcheck
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: healthcheck
+  template:
+    metadata:
+      labels:
+        app: healthcheck
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: healthcheck
+          image: "{{ .Values.image }}:{{ .Values.tag }}"
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.port }}
+          # Is it alive? If this fails, Kubernetes restarts the container.
+          livenessProbe:
+            httpGet:
+              path: /api/v1/healthcheck
+              port: {{ .Values.port }}
+          # Is it ready for traffic? If this fails, no requests are sent to it.
+          readinessProbe:
+            httpGet:
+              path: /api/v1/healthcheck
+              port: {{ .Values.port }}
+          # Keeps one app from eating the whole Pi.
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 128Mi

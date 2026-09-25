@@ -1,0 +1,6 @@
+# Keep junk out of the build, and out of the final image.
+healthcheck
+Dockerfile
+.dockerignore
+chart/
+*.md
