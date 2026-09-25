@@ -10,11 +10,9 @@ image: 192.168.1.187:30050/healthcheck
 # per build is what makes Helm notice the change and roll the pod.
 tag: latest
 
-# If your registry requires authentication, set a Kubernetes Docker secret and
-# add it here, for example:
-# imagePullSecrets:
-#   - name: regcred
-imagePullSecrets: []
+# Use the private Zot registry pull secret created for the K3s cluster.
+imagePullSecrets:
+  - name: regcred
 
 # Always = re-download the image on every start, so a rebuilt "latest" is
 # picked up. Switch to IfNotPresent when you load an image onto the Pi by

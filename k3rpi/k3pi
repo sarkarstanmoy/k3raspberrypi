@@ -1,11 +1,30 @@
 #!/usr/bin/env bash
-# k3pi up    start the containers
-# k3pi down  stop them
 set -euo pipefail
 cd "$(dirname "$0")"
 
-case "${1:-}" in
-  up)   exec scripts/k3pi/cmd_up.sh   ;;
-  down) exec scripts/k3pi/cmd_down.sh ;;
-  *)    echo "usage: ./k3pi [up|down]" >&2; exit 1 ;;
+usage() {
+  cat <<'TXT'
+k3pi - manage the k3rpi project
+
+  ./k3pi up                             start the containers locally
+  ./k3pi down                           stop them
+  ./k3pi push <password> <svc> [tag]    build an app and push it to the registry
+  ./k3pi help                           show this message
+
+Examples
+  ./k3pi up
+  ./k3pi push mypassword healthcheck            # tags it :latest
+  ./k3pi push mypassword healthcheck v1.0.0
+
+Apps live in apps/, so <svc> is a folder name there - e.g. healthcheck.
+Settings (registry address, user) are at the top of scripts/k3pi/_shared.sh.
+TXT
+}
+
+case "${1:-help}" in
+  up)             exec scripts/k3pi/cmd_up.sh   ;;
+  down)           exec scripts/k3pi/cmd_down.sh ;;
+  push)           shift; exec scripts/k3pi/cmd_docker_push.sh "$@" ;;
+  help|-h|--help) usage ;;
+  *)              echo "unknown command: $1" >&2; echo >&2; usage >&2; exit 1 ;;
 esac

@@ -52,13 +52,40 @@ The Helm chart lives in [apps/healthcheck/chart](apps/healthcheck/chart). It pul
 From your Mac, log in to the Pi's registry endpoint and push the image:
 
 ```sh
-docker login 192.168.1.187:30050 -u admin -p CHANGE_ME
+# Configure Docker Desktop to allow insecure HTTP access to 192.168.1.187:30050.
+# Then log in without the removed --tls-verify flag.
+docker login 192.168.1.187:30050 -u admin -p <<password>>
 
 docker build -t 192.168.1.187:30050/healthcheck:latest ./apps/healthcheck
 docker push 192.168.1.187:30050/healthcheck:latest
 ```
 
+To allow plain HTTP on macOS, add this to Docker Desktop's daemon config:
+
+- Docker Desktop: Settings -> Docker Engine -> paste this JSON
+- or create/edit `~/.docker/daemon.json` and add:
+
+```json
+{
+  "insecure-registries": [
+    "192.168.1.187:30050"
+  ]
+}
+```
+
+Then apply the change and restart Docker Desktop before retrying the push.
+
 If the registry is private, use the same username/password you configured for Zot.
+
+To verify that the image is in the Zot registry, run:
+
+```sh
+curl -s http://192.168.1.187:30050/v2/_catalog | jq
+curl -s http://192.168.1.187:30050/v2/healthcheck/tags/list | jq
+
+# If the registry is protected:
+curl -u admin:<<password>> -s http://192.168.1.187:30050/v2/healthcheck/tags/list | jq
+```
 
 ### 2. Refer to the image in the chart
 
@@ -91,7 +118,7 @@ If you need private registry auth for the cluster, add an image pull secret:
 kubectl -n default create secret docker-registry regcred \
   --docker-server=192.168.1.187:30050 \
   --docker-username=admin \
-  --docker-password=CHANGE_ME
+  --docker-password=<<password>>
 ```
 
 Then in the chart values:
@@ -120,7 +147,7 @@ Use this exact flow for a private Zot registry on the Pi.
 ### 1) Log in and push the image from your Mac
 
 ```sh
-docker login 192.168.1.187:30050 -u admin -p CHANGE_ME
+docker login 192.168.1.187:30050 -u admin -p <<password>>
 docker build -t 192.168.1.187:30050/healthcheck:latest ./apps/healthcheck
 docker push 192.168.1.187:30050/healthcheck:latest
 ```
@@ -131,7 +158,7 @@ docker push 192.168.1.187:30050/healthcheck:latest
 kubectl -n default create secret docker-registry regcred \
   --docker-server=192.168.1.187:30050 \
   --docker-username=admin \
-  --docker-password=CHANGE_ME
+  --docker-password=<<password>>
 ```
 
 ### 3) Install or upgrade the app with the registry image
