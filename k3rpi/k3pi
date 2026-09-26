@@ -9,12 +9,15 @@ k3pi - manage the k3rpi project
   ./k3pi up                             start the containers locally
   ./k3pi down                           stop them
   ./k3pi push <password> <svc> [tag]    build an app and push it to the registry
+  ./k3pi helm push <svc> [version]      package an app's chart and push it to the registry
   ./k3pi help                           show this message
 
 Examples
   ./k3pi up
   ./k3pi push mypassword healthcheck            # tags it :latest
   ./k3pi push mypassword healthcheck v1.0.0
+  ./k3pi helm push healthcheck                  # version 0.1.<YYYYMMDDHHMMSS>
+  ZOT_PASSWORD=mypassword ./k3pi helm push healthcheck 0.2.0
 
 Apps live in apps/, so <svc> is a folder name there - e.g. healthcheck.
 Settings (registry address, user) are at the top of scripts/k3pi/_shared.sh.
@@ -25,6 +28,11 @@ case "${1:-help}" in
   up)             exec scripts/k3pi/cmd_up.sh   ;;
   down)           exec scripts/k3pi/cmd_down.sh ;;
   push)           shift; exec scripts/k3pi/cmd_docker_push.sh "$@" ;;
+  helm)
+    case "${2:-}" in
+      push) shift 2; exec scripts/k3pi/cmd_helm_push.sh "$@" ;;
+      *)    echo "unknown helm command: ${2:-}" >&2; echo >&2; usage >&2; exit 1 ;;
+    esac ;;
   help|-h|--help) usage ;;
   *)              echo "unknown command: $1" >&2; echo >&2; usage >&2; exit 1 ;;
 esac

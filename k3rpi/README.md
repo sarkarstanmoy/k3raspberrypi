@@ -36,7 +36,9 @@ k3pi                     entrypoint: dispatches to the scripts below
 scripts/k3pi/
 ├── _shared.sh            settings and helper functions, sourced by the others
 ├── cmd_up.sh             docker compose up -d --build
-└── cmd_down.sh           docker compose down
+├── cmd_down.sh           docker compose down
+├── cmd_docker_push.sh    ./k3pi push: build an image and push it to Zot
+└── cmd_helm_push.sh      ./k3pi helm push: package a chart and push it to Zot
 docker-compose.yml       the services
 ```
 
@@ -139,6 +141,90 @@ helm install healthcheck apps/healthcheck/chart \
 ```
 
 The app is then served at http://healthcheck.192.168.1.187.nip.io/api/v1/healthcheck
+
+## Helm charts in Zot
+
+Zot stores Helm charts as OCI artifacts next to the images, so the Pi can install
+a chart straight from the registry instead of needing a copy of this repo.
+Charts go under `charts/`, e.g. `oci://192.168.1.187:30050/charts/healthcheck`.
+
+Needs Helm 3.13 or newer on both machines, for `--plain-http`.
+
+### 1. Push the chart from your Mac
+
+```sh
+./k3pi helm push healthcheck                          # prompts for the Zot password
+ZOT_PASSWORD=<<password>> ./k3pi helm push healthcheck  # no prompt
+./k3pi helm push healthcheck 0.2.0                    # pick the version yourself
+```
+
+It lints `apps/<svc>/chart`, packages it, logs in to Zot as `admin` and pushes it.
+
+Without a version argument, the version is `<major>.<minor>` from `Chart.yaml`
+plus the current UTC time, e.g. `0.1.20260926143015`. Helm only accepts SemVer,
+and a timestamp in the patch slot is valid (no leading zeros) and sorts newest
+last, so every push is a new version and the latest one wins.
+
+The registry address and user come from [scripts/k3pi/_shared.sh](scripts/k3pi/_shared.sh).
+
+Check what's in the registry:
+
+```sh
+curl -u admin:<<password>> -s http://192.168.1.187:30050/v2/charts/healthcheck/tags/list | jq
+helm show chart oci://192.168.1.187:30050/charts/healthcheck --plain-http
+```
+
+### 2. Install it on the Pi
+
+SSH in and point Helm at the K3s cluster. K3s writes its kubeconfig to
+`/etc/rancher/k3s/k3s.yaml`, which is root-only, so copy it once:
+
+```sh
+ssh admin@192.168.1.187
+
+# one-time setup
+curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+mkdir -p ~/.kube
+sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+sudo chown "$USER" ~/.kube/config
+echo 'export KUBECONFIG=~/.kube/config' >> ~/.bashrc && source ~/.bashrc
+
+# log in to Zot (remembered in ~/.config/helm/registry/config.json)
+helm registry login 192.168.1.187:30050 --plain-http -u admin
+```
+
+Then install or upgrade from the registry. Leave out `--version` to get the
+newest push:
+
+```sh
+helm upgrade --install healthcheck \
+  oci://192.168.1.187:30050/charts/healthcheck \
+  --plain-http \
+  --set tag=latest
+
+# or pin an exact chart version
+helm upgrade --install healthcheck \
+  oci://192.168.1.187:30050/charts/healthcheck \
+  --version 0.1.20260926143015 --plain-http
+```
+
+The chart's `values.yaml` already expects the `regcred` pull secret, so create it
+first if you haven't (see [Create the pull secret](#2-create-the-pull-secret-in-k3s)).
+Any `--set` or `-f values.yaml` override works the same as with a local chart.
+
+Check the rollout:
+
+```sh
+helm list
+helm history healthcheck
+kubectl get pods -l app=healthcheck
+curl http://healthcheck.192.168.1.187.nip.io/api/v1/healthcheck
+```
+
+To go back to an earlier release, use `helm rollback healthcheck <revision>`.
+
+You can run the same `helm upgrade --install` from your Mac too, if your Mac's
+kubeconfig points at the Pi.
 
 ## Quick start: push from your Mac and deploy via Helm
 
